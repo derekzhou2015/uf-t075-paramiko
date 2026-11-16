@@ -26,7 +26,13 @@ import os
 from hashlib import sha256
 
 from paramiko import util
-from paramiko.common import byte_chr, byte_mask, max_byte, zero_byte
+from paramiko.common import (
+    byte_chr,
+    byte_mask,
+    max_byte,
+    validate_dh_exchange_value,
+    zero_byte,
+)
 from paramiko.message import Message
 from paramiko.ssh_exception import SSHException
 
@@ -97,8 +103,7 @@ class KexGroup14SHA256:
         # client mode
         host_key = m.get_string()
         self.f = m.get_mpint()
-        if (self.f < 1) or (self.f > self.P - 1):
-            raise SSHException('Server kex "f" is out of range')
+        validate_dh_exchange_value(self.f, self.P, 'Server kex "f"')
         sig = m.get_binary()
         K = pow(self.f, self.x, self.P)
         # okay, build up the hash H of
@@ -121,8 +126,7 @@ class KexGroup14SHA256:
     def _parse_kexdh_init(self, m):
         # server mode
         self.e = m.get_mpint()
-        if (self.e < 1) or (self.e > self.P - 1):
-            raise SSHException('Client kex "e" is out of range')
+        validate_dh_exchange_value(self.e, self.P, 'Client kex "e"')
         K = pow(self.e, self.x, self.P)
         key = self.transport.get_server_key().asbytes()
         # okay, build up the hash H of

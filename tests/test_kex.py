@@ -45,6 +45,7 @@ from paramiko.kex_gex import KexGexSHA256
 from paramiko.kex_group14 import KexGroup14SHA256
 from paramiko.kex_group16 import KexGroup16SHA512
 from paramiko.kex_mlkem import KexMLKEM768X25519
+from paramiko.primes import is_probable_prime
 from paramiko.ssh_exception import SSHException
 
 from ._loop import LoopSocket
@@ -86,7 +87,9 @@ class FakeKey:
 
 
 class FakeModulusPack:
-    P = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF  # noqa
+    # RFC 3526 group 14: a 2048-bit safe prime, satisfying the 2048-bit
+    # minimum KexGexSHA256 declares in its GEX request.
+    P = KexGroup14SHA256.P
     G = 2
 
     def get_modulus(self, min, ask, max):
@@ -130,7 +133,7 @@ class FakeTransport:
 
 
 class KexTest(unittest.TestCase):
-    K = 14730343317708716439807310032871972459448364195094179797249681733965528989482751523943515690110179031004049109375612685505881911274101441415545039654102474376472240501616988799699744135291070488314748284283496055223852115360852283821334858541043710301057312858051901453919067023103730011648890038847384890504  # noqa
+    K = 12775342822141462769873836232046646558435129877956840348900188991579146843888867171403769263899832547779397673679342642957844875897383558594540549149134347551943436867189251193643504963370723164708745774339533031080201271549527265102020193515297930725968908655908026380056496240402754592278682068636334505640953936274882549880142393042956896885671602638771239947830672868374200894113013130430877474060410300954800991605865280408697830265503396760409931096001568664943731415297678357368403285720176098024030628702941192943061129241601721237314842959691018246791769382386033845941657702575140897931331859429263816744586  # noqa
 
     def setUp(self):
         self._original_urandom = os.urandom
@@ -173,7 +176,7 @@ class KexTest(unittest.TestCase):
         msg.add_mpint(FakeModulusPack.G)
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_GROUP, msg)
-        x = b"20000000807E2DDB1743F3487D6545F04F1C8476092FB912B013626AB5BCEB764257D88BBA64243B9F348DF7B41B8C814A995E00299913503456983FFB9178D3CD79EB6D55522418A8ABF65375872E55938AB99A84A0B5FC8A1ECC66A7C3766E7E0F80B7CE2C9225FC2DD683F4764244B72963BBB383F529DCF0C5D17740B8A2ADBE9208D4"  # noqa
+        x = b"2000000100790190D806C7C7C847DD4B0360F67D37E8A3BDA298C2FE0CE643346A27556A2A8F3CDF8BDF2D25EB688993E94C97A7449863B661A7CCA259AE783054795E47C8F0F6FB8226B8E453854EA3DA57A3747D805E691B7A7E7D79A7917483ACF1DA54CE5A6ABCD4DE9EC110CC1EC77796807FDEB47231D8A75640254942C645171A7F76D4B926EF64F6393EF30F9CCC635CDB1FA651852529822614506FD120094B38A28C16B9DB12E05078D8850B23952DF09035C9EC06D648B659730EDD50C0F590E71E0C4C2258143DE206D52FDE9812320EB1D51244F865722C79E248E6E63A0228C30B77BB466E4AE7C1635184923AEB0D22118B1E522C544A0CFCF4EA68BEFD"  # noqa
         self.assertEqual(x, hexlify(transport._message.asbytes()).upper())
         self.assertEqual(
             (paramiko.kex_gex._MSG_KEXDH_GEX_REPLY,), transport._expect
@@ -185,7 +188,7 @@ class KexTest(unittest.TestCase):
         msg.add_string("fake-sig")
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_REPLY, msg)
-        H = b"968D1B16D8A8B701334FDAC6E0C8BABC2E16016DB333BA1B72E07E79515A1F64"
+        H = b"F55272D40A2130B1D6AF45F5D659F5D646FFF68F0FB24F620AFDA8E326A60350"
         self.assertEqual(self.K, transport._K)
         self.assertEqual(H, hexlify(transport._H).upper())
         self.assertEqual((b"fake-host-key", b"fake-sig"), transport._verify)
@@ -206,7 +209,7 @@ class KexTest(unittest.TestCase):
         msg.add_mpint(FakeModulusPack.G)
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_GROUP, msg)
-        x = b"20000000807E2DDB1743F3487D6545F04F1C8476092FB912B013626AB5BCEB764257D88BBA64243B9F348DF7B41B8C814A995E00299913503456983FFB9178D3CD79EB6D55522418A8ABF65375872E55938AB99A84A0B5FC8A1ECC66A7C3766E7E0F80B7CE2C9225FC2DD683F4764244B72963BBB383F529DCF0C5D17740B8A2ADBE9208D4"  # noqa
+        x = b"2000000100790190D806C7C7C847DD4B0360F67D37E8A3BDA298C2FE0CE643346A27556A2A8F3CDF8BDF2D25EB688993E94C97A7449863B661A7CCA259AE783054795E47C8F0F6FB8226B8E453854EA3DA57A3747D805E691B7A7E7D79A7917483ACF1DA54CE5A6ABCD4DE9EC110CC1EC77796807FDEB47231D8A75640254942C645171A7F76D4B926EF64F6393EF30F9CCC635CDB1FA651852529822614506FD120094B38A28C16B9DB12E05078D8850B23952DF09035C9EC06D648B659730EDD50C0F590E71E0C4C2258143DE206D52FDE9812320EB1D51244F865722C79E248E6E63A0228C30B77BB466E4AE7C1635184923AEB0D22118B1E522C544A0CFCF4EA68BEFD"  # noqa
         self.assertEqual(x, hexlify(transport._message.asbytes()).upper())
         self.assertEqual(
             (paramiko.kex_gex._MSG_KEXDH_GEX_REPLY,), transport._expect
@@ -218,7 +221,7 @@ class KexTest(unittest.TestCase):
         msg.add_string("fake-sig")
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_REPLY, msg)
-        H = b"518386608B15891AE5237DEE08DCADDE76A0BCEFCE7F6DB3AD66BC41D256DFE5"
+        H = b"7781D2ED99E5ACB708C84E8CD5182507654C6DAE31F7FA2091E0C364945A48BD"
         self.assertEqual(self.K, transport._K)
         self.assertEqual(H, hexlify(transport._H).upper())
         self.assertEqual((b"fake-host-key", b"fake-sig"), transport._verify)
@@ -242,7 +245,7 @@ class KexTest(unittest.TestCase):
         msg.add_int(4096)
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_REQUEST, msg)
-        x = b"1F0000008100FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF0000000102"  # noqa
+        x = b"1F0000010100FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF0000000102"  # noqa
         self.assertEqual(x, hexlify(transport._message.asbytes()).upper())
         self.assertEqual(
             (paramiko.kex_gex._MSG_KEXDH_GEX_INIT,), transport._expect
@@ -252,9 +255,9 @@ class KexTest(unittest.TestCase):
         msg.add_mpint(12345)
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_INIT, msg)
-        K = 67592995013596137876033460028393339951879041140378510871612128162185209509220726296697886624612526735888348020498716482757677848959420073720160491114319163078862905400020959196386947926388406687288901564192071077389283980347784184487280885335302632305026248574716290537036069329724382811853044654824945750581  # noqa
-        H = b"CCAC0497CF0ABA1DBF55E1A3995D17F4CC31824B0E8D95CDF8A06F169D050D80"
-        x = b"210000000866616B652D6B6579000000807E2DDB1743F3487D6545F04F1C8476092FB912B013626AB5BCEB764257D88BBA64243B9F348DF7B41B8C814A995E00299913503456983FFB9178D3CD79EB6D55522418A8ABF65375872E55938AB99A84A0B5FC8A1ECC66A7C3766E7E0F80B7CE2C9225FC2DD683F4764244B72963BBB383F529DCF0C5D17740B8A2ADBE9208D40000000866616B652D736967"  # noqa
+        K = 16990795098881292300589617966102444175680652951778177259631700176383516080603616441906301938335500329773705262603452401492741304688032031455903325015049940949974478160350932411123752914713990327044723277156679187891975862330047206857050520499309679326064920785106253099713840685083983571002233047138985300154156734949832481250024774893950494419175035146836738574178734648929506915510670561990822486769235403784425002137278502513112036980572148969004021498978241805867769499888203018319483198651244872328054696263486194008908261706627251110376575377156054865326784792813332765373886800245074117363065380728484836472695  # noqa
+        H = b"6B4B430D1E2387C17179152ACC1AA6AF454DA5D3700DE580ACB3440C92ACB32E"
+        x = b"210000000866616B652D6B657900000100790190D806C7C7C847DD4B0360F67D37E8A3BDA298C2FE0CE643346A27556A2A8F3CDF8BDF2D25EB688993E94C97A7449863B661A7CCA259AE783054795E47C8F0F6FB8226B8E453854EA3DA57A3747D805E691B7A7E7D79A7917483ACF1DA54CE5A6ABCD4DE9EC110CC1EC77796807FDEB47231D8A75640254942C645171A7F76D4B926EF64F6393EF30F9CCC635CDB1FA651852529822614506FD120094B38A28C16B9DB12E05078D8850B23952DF09035C9EC06D648B659730EDD50C0F590E71E0C4C2258143DE206D52FDE9812320EB1D51244F865722C79E248E6E63A0228C30B77BB466E4AE7C1635184923AEB0D22118B1E522C544A0CFCF4EA68BEFD0000000866616B652D736967"  # noqa
         self.assertEqual(K, transport._K)
         self.assertEqual(H, hexlify(transport._H).upper())
         self.assertEqual(x, hexlify(transport._message.asbytes()).upper())
@@ -276,7 +279,7 @@ class KexTest(unittest.TestCase):
         msg.add_int(2048)
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_REQUEST_OLD, msg)
-        x = b"1F0000008100FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF0000000102"  # noqa
+        x = b"1F0000010100FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF0000000102"  # noqa
         self.assertEqual(x, hexlify(transport._message.asbytes()).upper())
         self.assertEqual(
             (paramiko.kex_gex._MSG_KEXDH_GEX_INIT,), transport._expect
@@ -286,9 +289,9 @@ class KexTest(unittest.TestCase):
         msg.add_mpint(12345)
         msg.rewind()
         kex.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_INIT, msg)
-        K = 67592995013596137876033460028393339951879041140378510871612128162185209509220726296697886624612526735888348020498716482757677848959420073720160491114319163078862905400020959196386947926388406687288901564192071077389283980347784184487280885335302632305026248574716290537036069329724382811853044654824945750581  # noqa
-        H = b"3DDD2AD840AD095E397BA4D0573972DC60F6461FD38A187CACA6615A5BC8ADBB"
-        x = b"210000000866616B652D6B6579000000807E2DDB1743F3487D6545F04F1C8476092FB912B013626AB5BCEB764257D88BBA64243B9F348DF7B41B8C814A995E00299913503456983FFB9178D3CD79EB6D55522418A8ABF65375872E55938AB99A84A0B5FC8A1ECC66A7C3766E7E0F80B7CE2C9225FC2DD683F4764244B72963BBB383F529DCF0C5D17740B8A2ADBE9208D40000000866616B652D736967"  # noqa
+        K = 16990795098881292300589617966102444175680652951778177259631700176383516080603616441906301938335500329773705262603452401492741304688032031455903325015049940949974478160350932411123752914713990327044723277156679187891975862330047206857050520499309679326064920785106253099713840685083983571002233047138985300154156734949832481250024774893950494419175035146836738574178734648929506915510670561990822486769235403784425002137278502513112036980572148969004021498978241805867769499888203018319483198651244872328054696263486194008908261706627251110376575377156054865326784792813332765373886800245074117363065380728484836472695  # noqa
+        H = b"74B11B41A7359E7C65B795069C979BFF397782502D979447B03BF5ABE728B967"
+        x = b"210000000866616B652D6B657900000100790190D806C7C7C847DD4B0360F67D37E8A3BDA298C2FE0CE643346A27556A2A8F3CDF8BDF2D25EB688993E94C97A7449863B661A7CCA259AE783054795E47C8F0F6FB8226B8E453854EA3DA57A3747D805E691B7A7E7D79A7917483ACF1DA54CE5A6ABCD4DE9EC110CC1EC77796807FDEB47231D8A75640254942C645171A7F76D4B926EF64F6393EF30F9CCC635CDB1FA651852529822614506FD120094B38A28C16B9DB12E05078D8850B23952DF09035C9EC06D648B659730EDD50C0F590E71E0C4C2258143DE206D52FDE9812320EB1D51244F865722C79E248E6E63A0228C30B77BB466E4AE7C1635184923AEB0D22118B1E522C544A0CFCF4EA68BEFD0000000866616B652D736967"  # noqa
         self.assertEqual(K, transport._K)
         self.assertEqual(H, hexlify(transport._H).upper())
         self.assertEqual(x, hexlify(transport._message.asbytes()).upper())
@@ -477,6 +480,239 @@ class KexTest(unittest.TestCase):
         self.assertEqual(K, transport._K)
         self.assertTrue(transport._activated)
         self.assertEqual(H, hexlify(transport._H).upper())
+
+
+# RFC 2409 group 2: a genuine 1024-bit safe prime. Used to prove the GEX
+# client enforces its declared 2048-bit minimum (it is prime, so only the
+# bit-size policy can reject it).
+GROUP2_1024_PRIME = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF  # noqa
+
+
+class KexValidationTest(unittest.TestCase):
+    """
+    Validation of peer-supplied key exchange values and of GEX group
+    parameters, applied uniformly across the modp kex engines
+    (group14-sha256, group16-sha512, group-exchange-sha256) and across
+    client/server roles, matching the strictness the elliptic-curve
+    engines already had.
+    """
+
+    @staticmethod
+    def _degenerate_values(p):
+        # identity element, order-2 element, the modulus itself, and
+        # values outside the group entirely
+        return [0, 1, p - 1, p, p + 1, 2 * p]
+
+    def _group_pair(self, kex_class):
+        client = kex_class(FakeTransport(server=False))
+        client.start_kex()
+        server = kex_class(FakeTransport(server=True))
+        server.start_kex()
+        return client, server
+
+    def _gex_pair(self):
+        client = KexGexSHA256(FakeTransport(server=False))
+        client.start_kex()
+        group = Message()
+        group.add_mpint(FakeModulusPack.P)
+        group.add_mpint(FakeModulusPack.G)
+        group.rewind()
+        client.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_GROUP, group)
+        server = KexGexSHA256(FakeTransport(server=True))
+        server.start_kex()
+        request = Message()
+        request.add_int(2048)
+        request.add_int(2048)
+        request.add_int(4096)
+        request.rewind()
+        server.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_REQUEST, request)
+        return client, server
+
+    def _assert_degenerate_matrix(
+        self, pair_factory, p, reply_type, init_type
+    ):
+        # every degenerate value must be rejected on both sides of the
+        # exchange: as the server's "f" (client role) and as the
+        # client's "e" (server role)
+        for value in self._degenerate_values(p):
+            with self.subTest(value=value):
+                client, server = pair_factory()
+                reply = Message()
+                reply.add_string("fake-host-key")
+                reply.add_mpint(value)
+                reply.add_string("fake-sig")
+                reply.rewind()
+                with pytest.raises(SSHException):
+                    client.parse_next(reply_type, reply)
+                init = Message()
+                init.add_mpint(value)
+                init.rewind()
+                with pytest.raises(SSHException):
+                    server.parse_next(init_type, init)
+
+    def test_group14_rejects_degenerate_values(self):
+        self._assert_degenerate_matrix(
+            lambda: self._group_pair(KexGroup14SHA256),
+            KexGroup14SHA256.P,
+            paramiko.kex_group14._MSG_KEXDH_REPLY,
+            paramiko.kex_group14._MSG_KEXDH_INIT,
+        )
+
+    def test_group16_rejects_degenerate_values(self):
+        self._assert_degenerate_matrix(
+            lambda: self._group_pair(KexGroup16SHA512),
+            KexGroup16SHA512.P,
+            paramiko.kex_group14._MSG_KEXDH_REPLY,
+            paramiko.kex_group14._MSG_KEXDH_INIT,
+        )
+
+    def test_gex_rejects_degenerate_values(self):
+        self._assert_degenerate_matrix(
+            self._gex_pair,
+            FakeModulusPack.P,
+            paramiko.kex_gex._MSG_KEXDH_GEX_REPLY,
+            paramiko.kex_gex._MSG_KEXDH_GEX_INIT,
+        )
+
+    def test_modp_engines_accept_in_range_boundary_values(self):
+        # the strict check must not reject legitimate values, including
+        # the smallest and largest in-range ones
+        engines = [
+            (
+                lambda: self._group_pair(KexGroup14SHA256),
+                KexGroup14SHA256.P,
+                paramiko.kex_group14._MSG_KEXDH_REPLY,
+                paramiko.kex_group14._MSG_KEXDH_INIT,
+            ),
+            (
+                lambda: self._group_pair(KexGroup16SHA512),
+                KexGroup16SHA512.P,
+                paramiko.kex_group14._MSG_KEXDH_REPLY,
+                paramiko.kex_group14._MSG_KEXDH_INIT,
+            ),
+            (
+                self._gex_pair,
+                FakeModulusPack.P,
+                paramiko.kex_gex._MSG_KEXDH_GEX_REPLY,
+                paramiko.kex_gex._MSG_KEXDH_GEX_INIT,
+            ),
+        ]
+        for pair_factory, p, reply_type, init_type in engines:
+            for value in (2, p - 2):
+                with self.subTest(value=value):
+                    client, server = pair_factory()
+                    reply = Message()
+                    reply.add_string("fake-host-key")
+                    reply.add_mpint(value)
+                    reply.add_string("fake-sig")
+                    reply.rewind()
+                    client.parse_next(reply_type, reply)
+                    self.assertTrue(client.transport._activated)
+                    init = Message()
+                    init.add_mpint(value)
+                    init.rewind()
+                    server.parse_next(init_type, init)
+                    self.assertTrue(server.transport._activated)
+
+    @pytest.mark.skipif("not KexCurve25519.is_available()")
+    def test_curve25519_rejects_low_order_public_value(self):
+        # the newer engines already reject degenerate inputs; pin that
+        # behavior here as the consistency baseline for the modp fixes
+        low_order = b"\x00" * 32
+        client = KexCurve25519(FakeTransport(server=False))
+        client.start_kex()
+        reply = Message()
+        reply.add_string("fake-host-key")
+        reply.add_string(low_order)
+        reply.add_string("fake-sig")
+        reply.rewind()
+        with pytest.raises(SSHException):
+            client.parse_next(
+                paramiko.kex_curve25519._MSG_KEXECDH_REPLY, reply
+            )
+        server = KexCurve25519(FakeTransport(server=True))
+        server.start_kex()
+        init = Message()
+        init.add_string(low_order)
+        init.rewind()
+        with pytest.raises(SSHException):
+            server.parse_next(paramiko.kex_curve25519._MSG_KEXECDH_INIT, init)
+
+    # -- GEX group parameter policy -----------------------------------
+
+    def _gex_client(self):
+        client = KexGexSHA256(FakeTransport(server=False))
+        client.start_kex()
+        return client
+
+    def _feed_group(self, client, p, g):
+        group = Message()
+        group.add_mpint(p)
+        group.add_mpint(g)
+        group.rewind()
+        client.parse_next(paramiko.kex_gex._MSG_KEXDH_GEX_GROUP, group)
+
+    def test_gex_group_enforces_declared_min_bits(self):
+        # a prime group below the declared 2048-bit minimum is rejected,
+        # even though it passed the old hardcoded 1024-bit floor
+        client = self._gex_client()
+        with pytest.raises(SSHException, match="out of range"):
+            self._feed_group(client, GROUP2_1024_PRIME, 2)
+
+    def test_gex_group_enforces_declared_max_bits(self):
+        client = self._gex_client()
+        # shrink the declared accept window: a 2048-bit group must then
+        # be rejected as too large
+        client.max_bits = 1024
+        with pytest.raises(SSHException, match="out of range"):
+            self._feed_group(client, FakeModulusPack.P, 2)
+
+    def test_gex_group_rejects_composite_p(self):
+        # FakeModulusPack.P is prime; P+1 is even, P+2 an odd composite
+        for p in (FakeModulusPack.P + 1, FakeModulusPack.P + 2):
+            with self.subTest(p=p):
+                client = self._gex_client()
+                with pytest.raises(SSHException, match="not prime"):
+                    self._feed_group(client, p, 2)
+
+    def test_gex_group_rejects_degenerate_generator(self):
+        p = FakeModulusPack.P
+        for g in (0, 1, p - 1, p, p + 1):
+            with self.subTest(g=g):
+                client = self._gex_client()
+                with pytest.raises(SSHException, match="g.*out of range"):
+                    self._feed_group(client, p, g)
+
+    def test_gex_group_accepts_valid_group(self):
+        client = self._gex_client()
+        self._feed_group(client, FakeModulusPack.P, FakeModulusPack.G)
+        self.assertEqual(
+            (paramiko.kex_gex._MSG_KEXDH_GEX_REPLY,), client.transport._expect
+        )
+
+
+class PrimalityTest(unittest.TestCase):
+    def test_accepts_primes(self):
+        for n in (2, 3, 5, 53, 7919, KexGroup14SHA256.P, KexGroup16SHA512.P):
+            with self.subTest(n=n):
+                self.assertTrue(is_probable_prime(n))
+
+    def test_rejects_composites(self):
+        p = KexGroup14SHA256.P
+        composites = (
+            0,
+            1,
+            4,
+            561,  # Carmichael number
+            41041,  # Carmichael number
+            3215031751,  # strong pseudoprime to bases 2, 3, 5, 7
+            p + 1,  # even
+            p + 2,  # odd composite
+            p * 3,
+        )
+        for n in composites:
+            with self.subTest(n=n):
+                self.assertFalse(is_probable_prime(n))
 
 
 @pytest.mark.skipif("not KexMLKEM768X25519.is_available()")

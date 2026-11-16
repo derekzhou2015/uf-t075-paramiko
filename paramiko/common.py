@@ -22,6 +22,8 @@ Common constants and global variables.
 import logging
 import struct
 
+from paramiko.ssh_exception import SSHException
+
 #
 # Formerly of py3compat.py. May be fully delete'able with a deeper look?
 #
@@ -243,3 +245,26 @@ MIN_PACKET_SIZE = 2**12
 
 # Max windows size according to http://www.ietf.org/rfc/rfc4254.txt
 MAX_WINDOW_SIZE = 2**32 - 1
+
+
+def validate_dh_exchange_value(value, p, description):
+    """
+    Validate a Diffie-Hellman public exchange value (``e`` or ``f``)
+    received from a peer, for the MODP group defined by prime ``p``.
+
+    Per RFC 4253 section 8, the value must satisfy
+    ``1 < value < p - 1``.  Anything else is degenerate or out of
+    range: 0, 1, and ``p - 1`` pin the resulting shared secret to a
+    constant (1 or ``p - 1``) regardless of our private exponent, and
+    values >= ``p`` are not members of the group at all.  All of these
+    are rejected with `SSHException`, on both client and server sides,
+    matching the strict validation the elliptic-curve kex engines
+    perform.
+
+    :param int value: the peer's public exchange value.
+    :param int p: the prime defining the MODP group.
+    :param str description: identifies the value in the error message.
+    :raises SSHException: if the value is degenerate or out of range.
+    """
+    if not 1 < value < p - 1:
+        raise SSHException("{} is out of range".format(description))

@@ -109,7 +109,16 @@ class KexMLKEM768X25519:
 
     def _x25519_exchange(self, peer_pub_bytes):
         peer = X25519PublicKey.from_public_bytes(peer_pub_bytes)
-        secret = self.x25519_key.exchange(peer)
+        try:
+            secret = self.x25519_key.exchange(peer)
+        except ValueError:
+            # cryptography rejects low-order public values (which yield
+            # an all-zero shared secret) with a bare ValueError; surface
+            # it as the same SSHException the other kex engines raise
+            # for degenerate exchange values.
+            raise SSHException(
+                "peer's curve25519 public value has wrong order"
+            )
         # Per RFC 8731 (and reaffirmed by the hybrid draft), reject the
         # all-zero output that signals a small-order public value.
         if constant_time.bytes_eq(secret, b"\x00" * 32):

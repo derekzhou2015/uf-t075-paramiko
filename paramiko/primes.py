@@ -27,6 +27,65 @@ from paramiko.common import byte_mask
 from paramiko.ssh_exception import SSHException
 
 
+# small primes used for trial division before Miller-Rabin; catches the
+# overwhelming majority of composites (and all even inputs) cheaply.
+_SMALL_PRIMES = (
+    2,
+    3,
+    5,
+    7,
+    11,
+    13,
+    17,
+    19,
+    23,
+    29,
+    31,
+    37,
+    41,
+    43,
+    47,
+    53,
+)
+
+
+def is_probable_prime(n, trials=32):
+    """
+    Return ``True`` if ``n`` is prime with overwhelming probability.
+
+    Performs trial division by small primes, then ``trials`` rounds of
+    Miller-Rabin with uniformly random bases.  A composite input is
+    misidentified with probability at most ``4 ** (-trials)``; a prime
+    input is never misidentified.
+    """
+    if n < 2:
+        return False
+    for p in _SMALL_PRIMES:
+        if n == p:
+            return True
+        if n % p == 0:
+            return False
+    # write n - 1 as (2 ** s) * d with d odd
+    d = n - 1
+    s = 0
+    while d % 2 == 0:
+        s += 1
+        d //= 2
+    for _ in range(trials):
+        # random base a in [2, n - 2]
+        a = 2 + _roll_random(n - 3)
+        x = pow(a, d, n)
+        if (x == 1) or (x == n - 1):
+            continue
+        for _ in range(s - 1):
+            x = pow(x, 2, n)
+            if x == n - 1:
+                break
+        else:
+            return False
+    return True
+
+
 def _roll_random(n):
     """returns a random # from 0 to N-1"""
     bits = util.bit_length(n - 1)

@@ -34,7 +34,16 @@ class KexCurve25519:
             return True
 
     def _perform_exchange(self, peer_key):
-        secret = self.key.exchange(peer_key)
+        try:
+            secret = self.key.exchange(peer_key)
+        except ValueError:
+            # cryptography rejects low-order public values (which yield
+            # an all-zero shared secret) with a bare ValueError; surface
+            # it as the same SSHException the other kex engines raise
+            # for degenerate exchange values.
+            raise SSHException(
+                "peer's curve25519 public value has wrong order"
+            )
         if constant_time.bytes_eq(secret, b"\x00" * 32):
             raise SSHException(
                 "peer's curve25519 public value has wrong order"

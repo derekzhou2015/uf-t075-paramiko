@@ -26,8 +26,15 @@ import os
 from hashlib import sha256
 
 from paramiko import util
-from paramiko.common import DEBUG, byte_chr, byte_mask, byte_ord
+from paramiko.common import (
+    DEBUG,
+    byte_chr,
+    byte_mask,
+    byte_ord,
+    validate_dh_exchange_value,
+)
 from paramiko.message import Message
+from paramiko.primes import is_probable_prime
 from paramiko.ssh_exception import SSHException
 
 (
@@ -188,13 +195,22 @@ class KexGexSHA256:
     def _parse_kexdh_gex_group(self, m):
         self.p = m.get_mpint()
         self.g = m.get_mpint()
-        # reject if p's bit length < 1024 or > 8192
+        # enforce the bit-size policy we declared in our request: the
+        # server's p must be within (min_bits, max_bits), not merely
+        # within some hardcoded absolute range.
         bitlen = util.bit_length(self.p)
-        if (bitlen < 1024) or (bitlen > 8192):
+        if (bitlen < self.min_bits) or (bitlen > self.max_bits):
             raise SSHException(
                 "Server-generated gex p (don't ask) is out of range "
                 "({} bits)".format(bitlen)
             )
+        # the group itself must be sound: p must be (probably) prime,
+        # or the exchange is open to small-subgroup style manipulation.
+        if not is_probable_prime(self.p):
+            raise SSHException("Server-generated gex p is not prime")
+        # and g must be a plausible generator: 1 < g < p - 1.
+        if (self.g <= 1) or (self.g >= self.p - 1):
+            raise SSHException("Server-generated gex g is out of range")
         self.transport._log(DEBUG, "Got server p ({} bits)".format(bitlen))
         self._generate_x()
         # now compute e = g^x mod p
@@ -207,8 +223,7 @@ class KexGexSHA256:
 
     def _parse_kexdh_gex_init(self, m):
         self.e = m.get_mpint()
-        if (self.e < 1) or (self.e > self.p - 1):
-            raise SSHException('Client kex "e" is out of range')
+        validate_dh_exchange_value(self.e, self.p, 'Client kex "e"')
         self._generate_x()
         self.f = pow(self.g, self.x, self.p)
         K = pow(self.e, self.x, self.p)
@@ -252,8 +267,7 @@ class KexGexSHA256:
         host_key = m.get_string()
         self.f = m.get_mpint()
         sig = m.get_string()
-        if (self.f < 1) or (self.f > self.p - 1):
-            raise SSHException('Server kex "f" is out of range')
+        validate_dh_exchange_value(self.f, self.p, 'Server kex "f"')
         K = pow(self.f, self.x, self.p)
         # okay, build up the hash H of
         # (V_C || V_S || I_C || I_S || K_S || min || n || max || p || g || e || f || K)  # noqa
